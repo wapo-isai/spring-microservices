@@ -1,0 +1,33 @@
+server.port: 7001
+
+spring.data.mongodb:
+  host: localhost
+  port: 27017
+  database: product-db
+
+logging:
+  level:
+    root: INFO
+    se.isai.microservices: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+
+spring.cloud.stream:
+  defaultBinder: rabbit
+  default.contentType: application/json
+  bindings.messageProcessor-in-0:
+    destination: products
+    group: productsGroup
+
+spring.rabbitmq:
+  host: 127.0.0.1
+  port: 5672
+  username: guest
+  password: guest
+---
+spring.config.activate.on-profile: docker
+
+server.port: 8080
+
+spring.data.mongodb.host: mongodb
+
+spring.rabbitmq.host: rabbitmq

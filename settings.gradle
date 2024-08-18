@@ -1,0 +1,4 @@
+include ':microservices:product-service'
+include ':microservices:order-service'
+include ':microservices:user-service'
+include ':microservices:product-composite-service'
