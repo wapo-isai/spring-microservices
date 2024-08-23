@@ -1,3 +1,6 @@
+server.port: 7000
+server.error.include-message: always
+
 app:
   product-service:
     host: localhost
@@ -8,11 +11,6 @@ app:
   user-service:
     host: localhost
     port: 7003
-
-logging:
-  level:
-    root: INFO
-    se.isai: DEBUG
 
 spring.cloud.stream:
   defaultBinder: rabbit
@@ -37,9 +35,13 @@ spring.rabbitmq:
   username: guest
   password: guest
 
+logging:
+  level:
+    root: INFO
+    se.isai: DEBUG
+
 management.endpoint.health.show-details: "ALWAYS"
 management.endpoints.web.exposure.include: "*"
-
 ---
 spring.config.activate.on-profile: docker
 
@@ -57,7 +59,6 @@ app:
     port: 8080
 
 spring.rabbitmq.host: rabbitmq
-
 ---
 spring.config.activate.on-profile: streaming_partitioned
 

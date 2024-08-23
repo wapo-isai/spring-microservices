@@ -1,9 +1,7 @@
 package se.isai.microservices.composite.product;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.actuate.health.CompositeHealthContributor;
-import org.springframework.boot.actuate.health.HealthContributor;
-import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.boot.actuate.health.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import se.isai.microservices.composite.product.web.ProductCompositeIntegration;
@@ -18,14 +16,14 @@ public class HealthCheckConfiguration {
     ProductCompositeIntegration integration;
 
     @Bean
-    HealthContributor coreServices() {
+    ReactiveHealthContributor coreServices() {
 
-        final Map<String, HealthIndicator> registry = new LinkedHashMap<>();
+        final Map<String, ReactiveHealthIndicator> registry = new LinkedHashMap<>();
 
         registry.put("product", () -> integration.getProductHealth());
         registry.put("recommendation", () -> integration.getOrderHealth());
         registry.put("review", () -> integration.getUserHealth());
 
-        return CompositeHealthContributor.fromMap(registry);
+        return CompositeReactiveHealthContributor.fromMap(registry);
     }
 }

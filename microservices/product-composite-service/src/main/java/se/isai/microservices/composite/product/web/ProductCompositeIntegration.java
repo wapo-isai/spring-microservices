@@ -1,41 +1,47 @@
 package se.isai.microservices.composite.product.web;
 
-import static org.springframework.http.HttpMethod.GET;
+import static java.util.logging.Level.FINE;
+
+import static reactor.core.publisher.Flux.empty;
 
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.health.Health;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import se.isai.microservices.composite.product.dto.*;
 import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @RestController
 @RequestMapping("/comp")
 public class ProductCompositeIntegration {
     private static final Logger LOG = LoggerFactory.getLogger(ProductCompositeIntegration.class);
 
-    private final RestTemplate restTemplate;
+    private final WebClient webClient;
 
     private final String productServiceUrl;
     private final String orderServiceUrl;
     private final String userServiceUrl;
 
-    @Autowired
     private StreamBridge streamBridge;
+
+    private final Scheduler publishEventScheduler;
 
     @Autowired
     public ProductCompositeIntegration(
-            RestTemplate restTemplate,
+            @Qualifier("publishEventScheduler") Scheduler publishEventScheduler,
+            WebClient.Builder webClient,
+            StreamBridge streamBridge,
             @Value("${app.product-service.host}") String productServiceHost,
             @Value("${app.product-service.port}") int productServicePort,
             @Value("${app.order-service.host}") String orderServiceHost,
@@ -43,103 +49,83 @@ public class ProductCompositeIntegration {
             @Value("${app.user-service.host}") String userServiceHost,
             @Value("${app.user-service.port}") int userServicePort
     ) {
+        this.publishEventScheduler = publishEventScheduler;
+        this.webClient = webClient.build();
+        this.streamBridge = streamBridge;
 
-        this.restTemplate = restTemplate;
         productServiceUrl = "http://" + productServiceHost + ":" + productServicePort + "/product";
         orderServiceUrl = "http://" + orderServiceHost + ":" + orderServicePort + "/order";
         userServiceUrl = "http://" + userServiceHost + ":" + userServicePort + "/user";
     }
 
     @GetMapping(value = "/product/{productId}")
-    public Product getProduct(@PathVariable String productId) {
-        try {
+    public Mono<Product> getProduct(@PathVariable String productId) {
             String url = productServiceUrl + "/" + productId;
 
-            Product product = restTemplate.getForObject(url, Product.class);
-            return product;
-        } catch (Exception ex) {
-            LOG.debug("Exception: " + ex.getMessage());
-            return null;
-        }
+            return webClient.get().uri(url).retrieve().bodyToMono(Product.class).log(LOG.getName(), FINE).onErrorMap(WebClientResponseException.class, ex -> handleException(ex));
     }
 
     @GetMapping(value = "/product/list")
-    public List<Product> getProducts() {
-        try {
-            String url = productServiceUrl + "/list";
+    public Flux<Product> getProducts() {
+        String url = productServiceUrl + "/list";
 
-            LOG.debug("Will call the getRecommendations API on URL: {}", url);
-            List<Product> products = restTemplate
-                    .exchange(url, GET, null, new ParameterizedTypeReference<List<Product>>() {})
-                    .getBody();
-
-            LOG.debug("Found {} products", products.size());
-            return products;
-
-        } catch (Exception ex) {
-            LOG.warn("Got an exception while requesting products, return zero products: {}", ex.getMessage());
-            return new ArrayList<>();
-        }
+        return webClient.get().uri(url).retrieve().bodyToFlux(Product.class).log(LOG.getName(), FINE).onErrorResume(error -> empty());
     }
 
     @PostMapping(value = "/product")
-    public Product createProduct(Product body) {
-        sendMessage("products-out-0", new Event(Event.Type.CREATE, body.getProductId(), body));
-        return body;
+    public Mono<Product> createProduct(@RequestBody Product body) {
+        return Mono.fromCallable(() -> {
+            sendMessage("products-out-0", new Event(Event.Type.CREATE, body.getProductId(), body));
+            return body;
+        }).subscribeOn(publishEventScheduler);
     }
 
     @DeleteMapping(value="/product/{productId}")
-    public void deleteProduct(@PathVariable String productId) {
-        sendMessage("products-out-0", new Event(Event.Type.DELETE, productId, null));
+    public Mono<Void> deleteProduct(@PathVariable String productId) {
+        return Mono.fromRunnable(() -> sendMessage("products-out-0", new Event(Event.Type.DELETE, productId, null)))
+                .subscribeOn(publishEventScheduler).then();
     }
 
     @GetMapping(value="/order/{userId}")
-    public List<Order> getUserOrders(@PathVariable("userId") String userId) {
-        try {
+    public Flux<Order> getUserOrders(@PathVariable("userId") String userId) {
+
             String url = orderServiceUrl + "/" + userId;
 
-            List<Order> orders = restTemplate
-                    .exchange(url, GET, null, new ParameterizedTypeReference<List<Order>>() {})
-                    .getBody();
-
-            LOG.debug("Found {} orders", orders.size());
-            return orders;
-        } catch (Exception ex) {
-            LOG.warn("Got an exception while requesting products, return zero products: {}", ex.getMessage());
-            return new ArrayList<>();
-        }
+            return webClient.get().uri(url).retrieve().bodyToFlux(Order.class).log(LOG.getName(), FINE).onErrorResume(error -> empty());
     }
 
     @PostMapping(value="/order")
-    public void createOrderForUser(@RequestBody Order order) {
-        sendMessage("orders-out-0", new Event(Event.Type.CREATE, order.getUserId(), order));
+    public Mono<Order> createOrderForUser(@RequestBody Order order) {
+        return Mono.fromCallable(() -> {
+            sendMessage("orders-out-0", new Event(Event.Type.CREATE, order.getUserId(), order));
+            return order;
+        }).subscribeOn(publishEventScheduler);
     }
 
     @DeleteMapping(value="/order/{orderNumber}")
-    public void deleteUserOrder(@PathVariable("orderNumber") Long orderId) {
-        sendMessage("orders-out-0", new Event(Event.Type.DELETE, orderId, null));
+    public Mono<Void> deleteUserOrder(@PathVariable("orderNumber") Long orderId) {
+        return Mono.fromRunnable(() -> sendMessage("orders-out-0", new Event(Event.Type.DELETE, orderId, null)))
+                .subscribeOn(publishEventScheduler).then();
     }
 
     @GetMapping(value = "/user/{userId}")
-    public UserResponseModel login(@PathVariable("userId") String userId) {
-        try {
-            String url = userServiceUrl + "/" + userId;
-            UserResponseModel user = restTemplate.getForObject(url, UserResponseModel.class);
-            return user;
-        } catch (Exception ex) {
-            LOG.debug("Exception: " + ex.getMessage());
-            return null;
-        }
+    public Mono<User> login(@PathVariable("userId") String userId) {
+        String url = userServiceUrl + "/" + userId;
+        return webClient.get().uri(url).retrieve().bodyToMono(User.class).log(LOG.getName(), FINE).onErrorMap(WebClientResponseException.class, ex -> handleException(ex));
     }
 
     @PostMapping(value="/user/register")
-    public void register(@Valid @RequestBody User user) {
-        sendMessage("users-out-0", new Event(Event.Type.CREATE, user.getUserId(), user));
+    public Mono<User> register(@Valid @RequestBody User user) {
+        return Mono.fromCallable(() -> {
+            sendMessage("users-out-0", new Event(Event.Type.CREATE, user.getUserId(), user));
+            return user;
+        }).subscribeOn(publishEventScheduler);
     }
 
     @DeleteMapping(value="/user/{userId}")
-    public void unregisterUser(@PathVariable("userId") String userId) {
-        sendMessage("users-out-0", new Event(Event.Type.DELETE, userId, null));
+    public Mono<Void> unregisterUser(@PathVariable("userId") String userId) {
+        return Mono.fromRunnable(() -> sendMessage("users-out-0", new Event(Event.Type.DELETE, userId, null)))
+                .subscribeOn(publishEventScheduler).then();
     }
 
     private void sendMessage(String bindingName, Event event) {
@@ -150,27 +136,38 @@ public class ProductCompositeIntegration {
         streamBridge.send(bindingName, message);
     }
 
-    public Health getProductHealth() {
+    public Mono<Health> getProductHealth() {
         return getHealth(productServiceUrl);
     }
 
-    public Health getOrderHealth() {
+    public Mono<Health> getOrderHealth() {
         return getHealth(orderServiceUrl);
     }
 
-    public Health getUserHealth() {
+    public Mono<Health> getUserHealth() {
         return getHealth(userServiceUrl);
     }
 
-    private Health getHealth(String url) {
+    private Mono<Health> getHealth(String url) {
         url += "/actuator/health";
         LOG.debug("Will call the Health API on URL: {}", url);
-        String status = restTemplate.getForObject(url, String.class);
 
-        if(status.equals("UP")){
-            return Health.up().build();
+        return webClient.get().uri(url).retrieve().bodyToMono(String.class)
+                .map(s -> new Health.Builder().up().build())
+                .onErrorResume(ex -> Mono.just(new Health.Builder().down(ex).build()))
+                .log(LOG.getName(), FINE);
+    }
+
+    private Throwable handleException(Throwable ex) {
+        if (!(ex instanceof WebClientResponseException)) {
+            LOG.warn("Got a unexpected error: {}, will rethrow it", ex.toString());
+            return ex;
         }
 
-        return Health.down().build();
+        WebClientResponseException wcre = (WebClientResponseException) ex;
+
+        LOG.warn("Got an unexpected HTTP error: {}, will rethrow it", wcre.getStatusCode());
+        LOG.warn("Error body: {}", wcre.getResponseBodyAsString());
+        return ex;
     }
 }

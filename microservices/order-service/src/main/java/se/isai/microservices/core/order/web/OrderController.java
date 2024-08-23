@@ -2,6 +2,8 @@ package se.isai.microservices.core.order.web;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import se.isai.microservices.core.order.dto.Order;
 import se.isai.microservices.core.order.service.OrderService;
 
@@ -15,12 +17,7 @@ public class OrderController {
     OrderService orderService;
 
     @GetMapping("/{userId}")
-    public List<Order> getOrders(@PathVariable("userId") String userId) {
+    public Flux<Order> getOrders(@PathVariable("userId") String userId) {
         return orderService.getOrders(userId);
-    }
-
-    @PostMapping
-    public Order createOrder(@RequestBody Order order) {
-        return orderService.createOrder(order);
     }
 }

@@ -1,43 +1,48 @@
 package se.isai.microservices.core.product.service;
 
+import com.mongodb.DuplicateKeyException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import se.isai.microservices.core.product.dto.Product;
 import se.isai.microservices.core.product.persistence.ProductEntity;
 import se.isai.microservices.core.product.persistence.ProductRepository;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.logging.Level;
+
+import static java.util.logging.Level.FINE;
 
 @Service
 public class ProductServiceImpl implements ProductService {
     @Autowired
     ProductRepository productRepository;
+    private static final Logger LOG = LoggerFactory.getLogger(ProductServiceImpl.class);
 
     @Override
-    public List<Product> getProductList() {
-        List<ProductEntity> productEntities = (List<ProductEntity>) productRepository.findAll();
-        List<Product> products = new ArrayList<>();
-
-        for(ProductEntity productEntity : productEntities) {
-            Product product = new Product(
-                    productEntity.getId(),
-                    productEntity.getProductName(),
-                    productEntity.getProductPrice(),
-                    productEntity.getProductDescription(),
-                    productEntity.getProductCalories(),
-                    productEntity.getImageUrl()
-            );
-
-            products.add(product);
-        }
-
-        return products;
+    public Flux<Product> getProductList() {
+        return productRepository.findAll()
+                .switchIfEmpty(
+                        Flux.error(new Exception("Products Not Found"))
+                )
+                .log(LOG.getName(), FINE)
+                .map( productEntity -> {
+                    return new Product(
+                            productEntity.getId(),
+                            productEntity.getProductName(),
+                            productEntity.getProductPrice(),
+                            productEntity.getProductDescription(),
+                            productEntity.getProductCalories(),
+                            productEntity.getImageUrl()
+                    );
+                });
     }
 
     @Override
-    public Product saveProduct(Product product) {
+    public Mono<Product> saveProduct(Product product) {
+        LOG.info("product being saved: " + product.getProductName());
         ProductEntity productEntity = new ProductEntity(
                 product.getProductName(),
                 product.getProductPrice(),
@@ -46,41 +51,45 @@ public class ProductServiceImpl implements ProductService {
                 product.getImageUrl()
         );
 
-        productEntity = productRepository.save(productEntity);
+        Mono<Product> newEntity = productRepository.save(productEntity)
+                .log(LOG.getName(), FINE)
+                .onErrorMap(DuplicateKeyException.class, e -> new Exception("Duplicate key, Product Id: " + product.getProductId()))
+                .map(createdProduct -> {
+                    return new Product(
+                            createdProduct.getId(),
+                            createdProduct.getProductName(),
+                            createdProduct.getProductPrice(),
+                            createdProduct.getProductDescription(),
+                            createdProduct.getProductCalories(),
+                            createdProduct.getImageUrl()
+                    );
+                });
 
-        Product newProduct = new Product(
-                productEntity.getId(),
-                productEntity.getProductName(),
-                productEntity.getProductPrice(),
-                productEntity.getProductDescription(),
-                productEntity.getProductCalories(),
-                productEntity.getImageUrl()
-        );
-
-        return newProduct;
+        return newEntity;
     }
 
     @Override
-    public Product getProduct(String productId) {
-        Optional<ProductEntity> productEntity = productRepository.findById(productId);
-        Product newProduct = new Product();
-
-        if(productEntity.isPresent()) {
-            newProduct = new Product(
-                    productEntity.get().getId(),
-                    productEntity.get().getProductName(),
-                    productEntity.get().getProductPrice(),
-                    productEntity.get().getProductDescription(),
-                    productEntity.get().getProductCalories(),
-                    productEntity.get().getImageUrl()
-            );
-        }
-
-        return newProduct;
+    public Mono<Product> getProduct(String productId) {
+        return productRepository.findById(productId)
+                .switchIfEmpty(
+                        Mono.error(new Exception("Products Not Found"))
+                )
+                .log(LOG.getName(), FINE)
+                .map( productEntity -> {
+                    return new Product(
+                            productEntity.getId(),
+                            productEntity.getProductName(),
+                            productEntity.getProductPrice(),
+                            productEntity.getProductDescription(),
+                            productEntity.getProductCalories(),
+                            productEntity.getImageUrl()
+                    );
+                });
     }
 
     @Override
-    public void deleteProduct(String productId) {
-        productRepository.deleteById(productId);
+    public Mono<Void> deleteProduct(String productId) {
+
+        return productRepository.findById(productId).log(LOG.getName(), FINE).map(e -> productRepository.delete(e)).flatMap(e -> e);
     }
 }

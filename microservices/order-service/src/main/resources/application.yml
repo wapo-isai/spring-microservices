@@ -1,4 +1,5 @@
 server.port: 7002
+server.error.include-message: always
 
 spring.jpa.hibernate.ddl-auto: update
 
@@ -9,12 +10,7 @@ spring.datasource:
 
 spring.datasource.hikari.initializationFailTimeout: 60000
 
-logging:
-  level:
-    root: INFO
-    se.magnus: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+spring.cloud.function.definition: messageProcessor
 
 spring.cloud.stream:
   defaultBinder: rabbit
@@ -23,12 +19,31 @@ spring.cloud.stream:
     destination: orders
     group: ordersGroup
 
+spring.cloud.stream.bindings.messageProcessor-in-0.consumer:
+  maxAttempts: 3
+  backOffInitialInterval: 500
+  backOffMaxInterval: 1000
+  backOffMultiplier: 2.0
+
+spring.cloud.stream.rabbit.bindings.messageProcessor-in-0.consumer:
+  autoBindDlq: true
+  republishToDlq: true
+
 spring.rabbitmq:
   host: 127.0.0.1
   port: 5672
   username: guest
   password: guest
 
+logging:
+  level:
+    root: INFO
+    se.magnus: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+management.endpoint.health.show-details: "ALWAYS"
+management.endpoints.web.exposure.include: "*"
 ---
 spring.config.activate.on-profile: docker
 
@@ -38,3 +53,19 @@ spring.datasource:
   url: jdbc:postgresql://postgres/brewed-db
 
 spring.rabbitmq.host: rabbitmq
+---
+spring.config.activate.on-profile: streaming_partitioned
+
+spring.cloud.stream.bindings.messageProcessor-in-0.consumer:
+  partitioned: true
+  instanceCount: 2
+
+---
+spring.config.activate.on-profile: streaming_instance_0
+
+spring.cloud.stream.bindings.messageProcessor-in-0.consumer.instanceIndex: 0
+
+---
+spring.config.activate.on-profile: streaming_instance_1
+
+spring.cloud.stream.bindings.messageProcessor-in-0.consumer.instanceIndex: 1

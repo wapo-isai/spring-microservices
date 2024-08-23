@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 import se.isai.microservices.core.user.dto.CreateUserRequestModel;
 import se.isai.microservices.core.user.dto.LoginRequestModel;
 import se.isai.microservices.core.user.dto.User;
@@ -27,34 +28,7 @@ public class UserController {
     }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<?> getUser(@RequestBody LoginRequestModel loginRequest) {
-        try {
-            User user = userService.getUserByUsername(loginRequest.getUsername());
-
-            if(loginRequest.getPassword().equals(user.getPassword())) {
-                UserResponseModel returnValue;
-                returnValue = new UserResponseModel(user.getUserId(), user.getUsername());
-                return ResponseEntity.status(HttpStatus.OK).body(returnValue);
-            }
-
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("There was a problem fetching the user");
-        }
-        catch (Exception e) {
-            log.info(e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("User not found");
-        }
-    }
-
-    @PostMapping
-    public ResponseEntity<UserResponseModel> createUser(@Valid @RequestBody CreateUserRequestModel userModel) {
-        User newUser = new User(userModel.getUsername(), userModel.getPassword());
-
-        User createdUser = userService.createUser(newUser);
-
-        UserResponseModel userResponse = new UserResponseModel(createdUser.getUserId(), createdUser.getUsername());
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(userResponse);
+    public Mono<User> getUser(@PathVariable String userId) {
+        return userService.getUserByUsername(userId);
     }
 }
