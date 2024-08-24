@@ -29,9 +29,9 @@ public class ProductCompositeIntegration {
 
     private final WebClient webClient;
 
-    private final String productServiceUrl;
-    private final String orderServiceUrl;
-    private final String userServiceUrl;
+    private static final String PRODUCT_SERVICE_URL = "http://product";
+    private static final String ORDER_SERVICE_URL = "http://order";
+    private static final String USER_SERVICE_URL = "http://user";
 
     private StreamBridge streamBridge;
 
@@ -40,34 +40,24 @@ public class ProductCompositeIntegration {
     @Autowired
     public ProductCompositeIntegration(
             @Qualifier("publishEventScheduler") Scheduler publishEventScheduler,
-            WebClient.Builder webClient,
-            StreamBridge streamBridge,
-            @Value("${app.product-service.host}") String productServiceHost,
-            @Value("${app.product-service.port}") int productServicePort,
-            @Value("${app.order-service.host}") String orderServiceHost,
-            @Value("${app.order-service.port}") int orderServicePort,
-            @Value("${app.user-service.host}") String userServiceHost,
-            @Value("${app.user-service.port}") int userServicePort
+            WebClient.Builder webClientBuilder,
+            StreamBridge streamBridge
     ) {
         this.publishEventScheduler = publishEventScheduler;
-        this.webClient = webClient.build();
+        this.webClient = webClientBuilder.build();
         this.streamBridge = streamBridge;
-
-        productServiceUrl = "http://" + productServiceHost + ":" + productServicePort + "/product";
-        orderServiceUrl = "http://" + orderServiceHost + ":" + orderServicePort + "/order";
-        userServiceUrl = "http://" + userServiceHost + ":" + userServicePort + "/user";
     }
 
     @GetMapping(value = "/product/{productId}")
     public Mono<Product> getProduct(@PathVariable String productId) {
-            String url = productServiceUrl + "/" + productId;
+            String url = PRODUCT_SERVICE_URL + "/product/" + productId;
 
             return webClient.get().uri(url).retrieve().bodyToMono(Product.class).log(LOG.getName(), FINE).onErrorMap(WebClientResponseException.class, ex -> handleException(ex));
     }
 
     @GetMapping(value = "/product/list")
     public Flux<Product> getProducts() {
-        String url = productServiceUrl + "/list";
+        String url = PRODUCT_SERVICE_URL + "/product/" + "/list";
 
         return webClient.get().uri(url).retrieve().bodyToFlux(Product.class).log(LOG.getName(), FINE).onErrorResume(error -> empty());
     }
@@ -89,7 +79,7 @@ public class ProductCompositeIntegration {
     @GetMapping(value="/order/{userId}")
     public Flux<Order> getUserOrders(@PathVariable("userId") String userId) {
 
-            String url = orderServiceUrl + "/" + userId;
+            String url = ORDER_SERVICE_URL + "/order/" + userId;
 
             return webClient.get().uri(url).retrieve().bodyToFlux(Order.class).log(LOG.getName(), FINE).onErrorResume(error -> empty());
     }
@@ -110,7 +100,7 @@ public class ProductCompositeIntegration {
 
     @GetMapping(value = "/user/{userId}")
     public Mono<User> login(@PathVariable("userId") String userId) {
-        String url = userServiceUrl + "/" + userId;
+        String url = USER_SERVICE_URL + "/user/" + userId;
         return webClient.get().uri(url).retrieve().bodyToMono(User.class).log(LOG.getName(), FINE).onErrorMap(WebClientResponseException.class, ex -> handleException(ex));
     }
 
@@ -137,15 +127,15 @@ public class ProductCompositeIntegration {
     }
 
     public Mono<Health> getProductHealth() {
-        return getHealth(productServiceUrl);
+        return getHealth(PRODUCT_SERVICE_URL);
     }
 
     public Mono<Health> getOrderHealth() {
-        return getHealth(orderServiceUrl);
+        return getHealth(ORDER_SERVICE_URL);
     }
 
     public Mono<Health> getUserHealth() {
-        return getHealth(userServiceUrl);
+        return getHealth(USER_SERVICE_URL);
     }
 
     private Mono<Health> getHealth(String url) {

@@ -5,9 +5,8 @@ spring init \
 --type=gradle-project \
 --java-version=17 \
 --packaging=jar \
---name=eureka-server \
---package-name=se.isai.springcloud.eurekaserver \
---groupId=se.isai.springcloud.eurekaserver \
+--name=gateway \
+--package-name=se.isai.springcloud.gateway \
+--groupId=se.isai.springcloud.gateway \
 --version=1.0.0-SNAPSHOT \
-eureka-server
-
+gateway
