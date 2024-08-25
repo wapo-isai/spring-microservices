@@ -83,3 +83,11 @@ services:
   eureka:
     build: spring-cloud/eureka-server
     mem_limit: 512m
+
+  config-server:
+    build: spring-cloud/config-server
+    mem_limit: 512m
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,native
+    volumes:
+      - $PWD/config-repo:/config-repo

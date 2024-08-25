@@ -5,8 +5,8 @@ spring init \
 --type=gradle-project \
 --java-version=17 \
 --packaging=jar \
---name=gateway \
---package-name=se.isai.springcloud.gateway \
---groupId=se.isai.springcloud.gateway \
+--name=config-server \
+--package-name=se.isai.springcloud.configserver \
+--groupId=se.isai.springcloud.configserver \
 --version=1.0.0-SNAPSHOT \
-gateway
+config-server
